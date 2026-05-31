@@ -4,7 +4,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import org.slf4j.Logger;
 

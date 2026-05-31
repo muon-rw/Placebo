@@ -1,5 +1,5 @@
 {
-	"key.categories.placebo": "Placebo",
+	"key.category.placebo.keys": "Placebo",
 	"placebo.toggleTrails": "切换 支持者 (在Discord中赞助作者) 轨迹",
 	"placebo.toggleWings": "切换 支持者 (在Discord中赞助作者) 翅膀",
 	"placebo.cmd.serialize_success": "已将 %s 保存至 %s。",

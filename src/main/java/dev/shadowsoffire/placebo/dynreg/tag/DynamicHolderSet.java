@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;

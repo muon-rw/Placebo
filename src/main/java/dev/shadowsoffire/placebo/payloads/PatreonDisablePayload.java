@@ -7,10 +7,13 @@ import java.util.UUID;
 import java.util.function.IntFunction;
 
 import dev.shadowsoffire.placebo.Placebo;
+import dev.shadowsoffire.placebo.network.IPayloadContext;
 import dev.shadowsoffire.placebo.network.PayloadProvider;
 import dev.shadowsoffire.placebo.patreon.TrailsManager;
 import dev.shadowsoffire.placebo.patreon.WingsManager;
 import io.netty.buffer.ByteBuf;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.FriendlyByteBuf;
@@ -19,9 +22,8 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ByIdMap;
-import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 public record PatreonDisablePayload(CosmeticType cosmetic, UUID id) implements CustomPacketPayload {
 
@@ -59,7 +61,10 @@ public record PatreonDisablePayload(CosmeticType cosmetic, UUID id) implements C
 
         @Override
         public void handleServer(PatreonDisablePayload msg, IPayloadContext ctx) {
-            PacketDistributor.sendToAllPlayers(new PatreonDisablePayload(msg.cosmetic(), ctx.player().getUUID()));
+            // NeoForge PacketDistributor.sendToAllPlayers -> Fabric PlayerLookup.all(server) + ServerPlayNetworking.send per-player.
+            PatreonDisablePayload out = new PatreonDisablePayload(msg.cosmetic(), ctx.player().getUUID());
+            MinecraftServer server = ctx.player().level().getServer();
+            PlayerLookup.all(server).forEach(p -> ServerPlayNetworking.send(p, out));
         }
 
         @Override

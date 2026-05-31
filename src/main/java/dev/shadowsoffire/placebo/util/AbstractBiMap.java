@@ -37,8 +37,6 @@ import com.google.common.collect.BiMap;
 import com.google.common.collect.ForwardingMap;
 import com.google.common.collect.ForwardingMapEntry;
 import com.google.common.collect.ForwardingSet;
-import com.google.errorprone.annotations.concurrent.LazyInit;
-import com.google.j2objc.annotations.WeakOuter;
 
 /**
  * Copy of Guava's AbstractBiMap since the original is package private.
@@ -210,8 +208,6 @@ public abstract class AbstractBiMap<K extends @Nullable Object, V extends @Nulla
         return inverse;
     }
 
-    @LazyInit
-
     private transient Set<K> keySet;
 
     @Override
@@ -220,7 +216,6 @@ public abstract class AbstractBiMap<K extends @Nullable Object, V extends @Nulla
         return (result == null) ? keySet = new KeySet() : result;
     }
 
-    @WeakOuter
     private class KeySet extends ForwardingSet<K> {
         @Override
         protected Set<K> delegate() {
@@ -308,8 +303,6 @@ public abstract class AbstractBiMap<K extends @Nullable Object, V extends @Nulla
         }
     }
 
-    @LazyInit
-
     private transient Set<Entry<K, V>> entrySet;
 
     @Override
@@ -377,7 +370,6 @@ public abstract class AbstractBiMap<K extends @Nullable Object, V extends @Nulla
         };
     }
 
-    @WeakOuter
     private class EntrySet extends ForwardingSet<Entry<K, V>> {
         final Set<Entry<K, V>> esDelegate = delegate.entrySet();
 

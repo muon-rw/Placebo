@@ -7,13 +7,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
-import org.jetbrains.annotations.ApiStatus;
-
+import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.level.ItemLike;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 
 /**
  * Class for managing the new method of filling creative tabs,
@@ -100,13 +99,18 @@ public class TabFillingRegistry {
         }
     }
 
-    @ApiStatus.Internal
-    public static void fillTabs(BuildCreativeModeTabContentsEvent e) {
-        FILLERS.getOrDefault(e.getTabKey(), Collections.emptyList()).forEach(f -> f.fillItemCategory(e.getTab(), e));
-    }
-
     private static void registerInternal(ResourceKey<CreativeModeTab> tab, ITabFiller filler) {
+        // Fabric has no single mod-bus contents event; instead a per-key CreativeModeTabEvents.modifyOutputEvent(tab)
+        // callback is wired lazily on the first filler for that key. The callback re-reads FILLERS at fire time (so
+        // later registrations still participate) and dispatches each filler, mirroring the Neo fillTabs listener.
+        boolean firstForKey = !FILLERS.containsKey(tab);
         FILLERS.computeIfAbsent(tab, k -> new ArrayList<>()).add(filler);
+        if (firstForKey) {
+            CreativeModeTabEvents.modifyOutputEvent(tab).register(output -> {
+                CreativeModeTab tabInstance = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(tab);
+                FILLERS.getOrDefault(tab, Collections.emptyList()).forEach(f -> f.fillItemCategory(tabInstance, output));
+            });
+        }
     }
 
 }

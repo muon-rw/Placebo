@@ -1,5 +1,5 @@
 {
-	"key.categories.placebo": "Placebo",
+	"key.category.placebo.keys": "Placebo",
 	"placebo.toggleTrails": "Basculer les sentiers de Patreon",
 	"placebo.toggleWings": "Basculer les ailes Patreon",
 	"placebo.cmd.serialize_success": "Sauvegarde de %s dans %s.",

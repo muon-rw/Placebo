@@ -4,6 +4,9 @@ import java.util.function.Predicate;
 
 import dev.shadowsoffire.placebo.cap.InternalItemHandler;
 import dev.shadowsoffire.placebo.menu.QuickMoveHandler.QuickMoveMenu;
+import dev.shadowsoffire.placebo.transfer.ResourceHandler;
+import dev.shadowsoffire.placebo.transfer.item.ItemResource;
+import dev.shadowsoffire.placebo.transfer.item.ItemUtil;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundContainerSetDataPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -16,9 +19,6 @@ import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.item.ItemResource;
-import net.neoforged.neoforge.transfer.item.ItemUtil;
 
 /**
  * Implmentation of {@link AbstractContainerMenu} which has utilities for quick move and

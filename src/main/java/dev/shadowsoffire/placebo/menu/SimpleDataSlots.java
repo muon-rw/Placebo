@@ -7,10 +7,10 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 
+import dev.shadowsoffire.placebo.transfer.energy.SimpleEnergyHandler;
 import it.unimi.dsi.fastutil.booleans.BooleanConsumer;
 import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.neoforged.neoforge.transfer.energy.SimpleEnergyHandler;
 
 /**
  * Simple DataSlot implementation that allows for lambda registration.

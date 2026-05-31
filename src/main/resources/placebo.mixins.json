@@ -1,0 +1,18 @@
+{
+	"required": true,
+	"package": "dev.shadowsoffire.placebo.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"AnvilBlockMixin",
+		"DataProviderMixin",
+		"ItemStackMixin"
+	],
+	"client": [
+		"client.AbstractContainerScreenMixin",
+		"client.AvatarRendererMixin",
+		"client.ChatComponentMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

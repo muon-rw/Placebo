@@ -1,14 +1,13 @@
 package dev.shadowsoffire.placebo.cap;
 
-import dev.shadowsoffire.placebo.menu.FilteredSlot;
-import net.neoforged.neoforge.transfer.item.ItemResource;
-import net.neoforged.neoforge.transfer.item.ItemStacksResourceHandler;
-import net.neoforged.neoforge.transfer.transaction.TransactionContext;
+import dev.shadowsoffire.placebo.transfer.item.ItemResource;
+import dev.shadowsoffire.placebo.transfer.item.ItemStacksResourceHandler;
+import dev.shadowsoffire.placebo.transfer.transaction.TransactionContext;
 
 /**
  * Extension of {@link ItemStacksResourceHandler} which provides access to the unrestricted {@link #extractInternal} and {@link #insertInternal} methods.
  * <p>
- * Used by {@link FilteredSlot} so that menus may define their own logic that differs from the logic used by automation.
+ * Used by {@code dev.shadowsoffire.placebo.menu.FilteredSlot} so that menus may define their own logic that differs from the logic used by automation.
  */
 public class InternalItemHandler extends ItemStacksResourceHandler {
 

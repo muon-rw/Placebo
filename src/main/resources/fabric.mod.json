@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "placebo",
+	"version": "${version}",
+	"name": "Placebo",
+	"description": "1 (one) library boi",
+	"authors": [
+		"Shadows_of_Fire"
+	],
+	"contact": {
+		"homepage": "https://www.curseforge.com/minecraft/mc-mods/placebo",
+		"sources": "https://github.com/Shadows-of-Fire/Placebo"
+	},
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"dev.shadowsoffire.placebo.Placebo"
+		],
+		"client": [
+			"dev.shadowsoffire.placebo.PlaceboClient"
+		]
+	},
+	"mixins": [
+		"placebo.mixins.json"
+	],
+	"accessWidener": "placebo.accesswidener",
+	"depends": {
+		"fabricloader": ">=0.18.0",
+		"minecraft": ">=26.1.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

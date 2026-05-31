@@ -14,6 +14,7 @@ import dev.shadowsoffire.placebo.datagen.DataGenBuilder.DataProviderFactory;
 import dev.shadowsoffire.placebo.dynreg.DynamicHolder;
 import dev.shadowsoffire.placebo.dynreg.DynamicRegistry;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagKey;
+import net.fabricmc.fabric.impl.tag.TagFileHooks;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.data.CachedOutput;
 import net.minecraft.data.DataProvider;
@@ -82,7 +83,12 @@ public abstract class DynamicTagProvider<R> implements DataProvider {
         for (TagBuilder builder : this.builders.values()) {
             this.validate(builder);
             if (builder.isEmpty()) continue;
-            TagFile file = new TagFile(List.copyOf(builder.values), builder.replace, List.copyOf(builder.remove));
+            // Vanilla 26.1's TagFile record is (entries, replace) — the legacy `remove` parameter is gone. The
+            // fabric-tag-api mixin re-adds removal: construct via the 2-arg ctor, then push the remove list through
+            // TagFileHooks#fabric_setRemove so the mixin-patched TagFile.CODEC writes it under "fabric:remove".
+            // This mirrors Fabric's own TagsProviderMixin#addRemove.
+            TagFile file = new TagFile(List.copyOf(builder.values), builder.replace);
+            ((TagFileHooks) (Object) file).fabric_setRemove(List.copyOf(builder.remove));
             JsonElement json = TagFile.CODEC.encodeStart(JsonOps.INSTANCE, file).getOrThrow();
             futures.add(DataProvider.saveStable(cachedOutput, json, this.pathProvider.json(builder.key.id())));
         }
@@ -90,11 +96,15 @@ public abstract class DynamicTagProvider<R> implements DataProvider {
     }
 
     private void validate(TagBuilder builder) {
+        // Vanilla 26.1's TagEntry no longer exposes isTag()/isRequired()/getId(); validation now goes through
+        // TagEntry#verifyIfPresent(elementCheck, tagCheck), which returns false only for a required entry whose id
+        // fails its check. We validate required element references against the registry's in-memory state and skip
+        // tag references (tagCheck always true) — matching the original which only checked required, non-tag entries.
         for (TagEntry entry : builder.values) {
-            if (!entry.isTag() && entry.isRequired() && this.registry.getValue(entry.getId()) == null) {
+            if (!entry.verifyIfPresent(id -> this.registry.getValue(id) != null, id -> true)) {
                 throw new IllegalStateException(
                     "Tag '%s' for registry '%s' references missing required entry '%s'. Did you register the tag provider before its content provider?"
-                        .formatted(builder.key.id(), this.registry.getId(), entry.getId()));
+                        .formatted(builder.key.id(), this.registry.getId(), entry));
             }
         }
     }

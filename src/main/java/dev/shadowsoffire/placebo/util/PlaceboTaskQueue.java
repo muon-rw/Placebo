@@ -7,12 +7,9 @@ import java.util.Queue;
 import org.apache.commons.lang3.tuple.Pair;
 
 import dev.shadowsoffire.placebo.Placebo;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.resources.Identifier;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.server.ServerStartedEvent;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /**
  * Helper class for scheduling transient tick-based tasks on the server.
@@ -35,6 +32,17 @@ public class PlaceboTaskQueue {
      */
     public static void submitDelayedTask(Identifier id, int delay, Task task) {
         Impl.TASKS.add(Pair.of(id, new DelayedTask(delay, task)));
+    }
+
+    /**
+     * Registers the task queue's lifecycle and tick listeners.
+     * <p>
+     * Must be called exactly once during mod initialization (common entrypoint).
+     */
+    public static void bootstrap() {
+        ServerTickEvents.END_SERVER_TICK.register(server -> Impl.tick());
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> Impl.TASKS.clear());
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> Impl.TASKS.clear());
     }
 
     @FunctionalInterface
@@ -77,13 +85,11 @@ public class PlaceboTaskQueue {
 
     }
 
-    @EventBusSubscriber(modid = Placebo.MODID)
-    public static class Impl {
+    private static class Impl {
 
         private static final Queue<Pair<Identifier, Task>> TASKS = new ArrayDeque<>();
 
-        @SubscribeEvent
-        public static void tick(ServerTickEvent.Post e) {
+        private static void tick() {
             Iterator<Pair<Identifier, Task>> it = TASKS.iterator();
             Pair<Identifier, Task> current = null;
             while (it.hasNext()) {
@@ -99,16 +105,6 @@ public class PlaceboTaskQueue {
                     ex.printStackTrace();
                 }
             }
-        }
-
-        @SubscribeEvent
-        public static void stopped(ServerStoppedEvent e) {
-            TASKS.clear();
-        }
-
-        @SubscribeEvent
-        public static void started(ServerStartedEvent e) {
-            TASKS.clear();
         }
     }
 

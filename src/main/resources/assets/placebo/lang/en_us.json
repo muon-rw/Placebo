@@ -1,5 +1,5 @@
 {
-	"key.categories.placebo": "Placebo",
+	"key.category.placebo.keys": "Placebo",
 	"placebo.toggleTrails": "Toggle Supporter Trails",
 	"placebo.toggleWings": "Toggle Supporter Wings",
 	"placebo.cmd.serialize_success": "Saved %s to %s.",

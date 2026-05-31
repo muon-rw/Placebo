@@ -3,12 +3,11 @@ package dev.shadowsoffire.placebo.util.data;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 
 import com.google.gson.JsonElement;
-import com.mojang.serialization.Codec;
+import com.google.gson.JsonObject;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.JsonOps;
 
@@ -16,15 +15,13 @@ import dev.shadowsoffire.placebo.datagen.DataGenBuilder;
 import dev.shadowsoffire.placebo.datagen.DataGenBuilder.DataProviderFactory;
 import dev.shadowsoffire.placebo.dynreg.DynamicRegistry;
 import dev.shadowsoffire.placebo.dynreg.DynamicRegistry.DataGenPopulator;
+import net.fabricmc.fabric.api.resource.conditions.v1.ResourceCondition;
+import net.fabricmc.fabric.api.resource.conditions.v1.ResourceConditions;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.data.CachedOutput;
 import net.minecraft.data.DataProvider;
 import net.minecraft.data.PackOutput;
 import net.minecraft.resources.Identifier;
-import net.neoforged.neoforge.common.conditions.ConditionalOps;
-import net.neoforged.neoforge.common.conditions.ICondition;
-import net.neoforged.neoforge.common.conditions.WithConditions;
-import net.neoforged.neoforge.data.event.GatherDataEvent;
 
 /**
  * Data provider for objects registered to a {@link DynamicRegistry}.
@@ -50,16 +47,6 @@ public abstract class DynamicRegistryProvider<R> implements DataProvider {
     public DynamicRegistryProvider(PackOutput output, CompletableFuture<HolderLookup.Provider> registries, DynamicRegistry<R> registry) {
         this.lookupProvider = registries;
         this.pathProvider = output.createPathProvider(PackOutput.Target.DATA_PACK, registry.getId().getNamespace() + "/" + registry.getId().getPath());
-        this.registry = registry;
-    }
-
-    /**
-     * @deprecated Use {@link #DynamicRegistryProvider(PackOutput, CompletableFuture, DynamicRegistry)}
-     */
-    @Deprecated(forRemoval = true)
-    public DynamicRegistryProvider(GatherDataEvent event, DynamicRegistry<R> registry) {
-        this.lookupProvider = event.getLookupProvider();
-        this.pathProvider = event.getGenerator().getPackOutput().createPathProvider(PackOutput.Target.DATA_PACK, registry.getId().getNamespace() + "/" + registry.getId().getPath());
         this.registry = registry;
     }
 
@@ -97,14 +84,21 @@ public abstract class DynamicRegistryProvider<R> implements DataProvider {
      * @param object     The object
      * @param conditions Conditions required for the object to load.
      */
-    protected final void addConditionally(Identifier id, R object, ICondition... conditions) {
+    protected final void addConditionally(Identifier id, R object, ResourceCondition... conditions) {
         this.populator.register(id, object);
-        Codec<Optional<WithConditions<R>>> conditionalCodec = ConditionalOps.<R>createConditionalCodecWithConditions(this.registry.elementCodec());
         if (!this.skipGeneration) {
             this.futures.add(this.lookupProvider.thenCompose(regs -> {
                 DynamicOps<JsonElement> ops = regs.createSerializationContext(JsonOps.INSTANCE);
-                Optional<WithConditions<R>> withConds = Optional.of(new WithConditions<>(Arrays.asList(conditions), object));
-                return DataProvider.saveStable(this.cachedOutput, conditionalCodec.encodeStart(ops, withConds).getOrThrow(), this.pathProvider.json(id));
+                JsonElement encoded = this.registry.elementCodec().encodeStart(ops, object).getOrThrow();
+                if (conditions.length > 0) {
+                    if (!encoded.isJsonObject()) {
+                        throw new IllegalStateException("Cannot add conditions to " + id + ": JSON is a non-object value");
+                    }
+                    JsonObject obj = encoded.getAsJsonObject();
+                    JsonElement condList = ResourceCondition.LIST_CODEC.encodeStart(JsonOps.INSTANCE, Arrays.asList(conditions)).getOrThrow();
+                    obj.add(ResourceConditions.CONDITIONS_KEY, condList);
+                }
+                return DataProvider.saveStable(this.cachedOutput, encoded, this.pathProvider.json(id));
             }));
         }
     }

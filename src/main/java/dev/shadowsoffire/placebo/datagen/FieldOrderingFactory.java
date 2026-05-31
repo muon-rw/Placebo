@@ -12,13 +12,10 @@ import org.jetbrains.annotations.Nullable;
 
 import com.google.gson.JsonElement;
 
-import dev.shadowsoffire.placebo.mixin.DatagenModLoaderMixin;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.data.DataProvider;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Util;
-import net.neoforged.fml.ModLoader;
-import net.neoforged.neoforge.data.event.GatherDataEvent;
 
 /**
  * The Field Ordering Factory allows users to provide custom comparators for ordering fields during datagen.
@@ -73,7 +70,7 @@ public interface FieldOrderingFactory {
         private static final Object INIT_LOCK = new Object();
         private static volatile boolean initialized = false;
 
-        // Captured by DatagenModLoaderMixin at the start of each datagen run.
+        // Captured by DataGenBuilder.build(FabricDataGenerator) at the start of each datagen run.
         @Nullable
         private static volatile Path packRoot = null;
 
@@ -89,8 +86,8 @@ public interface FieldOrderingFactory {
         }
 
         /**
-         * Records the datagen output root and pack layout, called from {@link DatagenModLoaderMixin} at the entry of {@code DatagenModLoader.begin}.
-         * Runs once per datagen invocation, before any provider executes.
+         * Records the datagen output root, called from {@code DataGenBuilder.build(FabricDataGenerator)} using the
+         * pack output folder. Runs once per datagen invocation, before any provider executes.
          */
         @ApiStatus.Internal
         public static void setPackRoot(Path root) {
@@ -99,7 +96,7 @@ public interface FieldOrderingFactory {
 
         /**
          * @return The datagen output root, or {@code null} if datagen has not been initialized via
-         *         {@code DatagenModLoader.begin}. When non-null, paths passed to {@link #getComparatorFor}
+         *         {@code DataGenBuilder.build}. When non-null, paths passed to {@link #getComparatorFor}
          *         can be reliably stripped of the root before being decomposed into pack-type/namespace/path.
          */
         @Nullable
@@ -108,17 +105,17 @@ public interface FieldOrderingFactory {
         }
 
         /**
-         * Posts {@link RegisterFieldOrderingsEvent} the first time a comparator is requested. This can't
-         * happen during {@link GatherDataEvent} because consumer mods running datagen are not required to include
-         * Placebo in their {@code --mod} list, so Placebo's {@link GatherDataEvent} listener may never fire.
+         * Fires {@link RegisterFieldOrderingsEvent} the first time a comparator is requested. This is done lazily
+         * rather than eagerly during datagen setup because Placebo itself runs no datagen and registers no data-gen
+         * entrypoint, so there is no Placebo-side hook to fire it from; the consumer mods own the datagen run.
          * <p>
-         * Saves run on concurrently on {@link Util#backgroundExecutor()} so we need a double-checked lock.
+         * Saves run concurrently on {@link Util#backgroundExecutor()} so we need a double-checked lock.
          */
         private static void ensureInitialized() {
             if (!initialized) {
                 synchronized (INIT_LOCK) {
                     if (!initialized) {
-                        ModLoader.postEvent(new RegisterFieldOrderingsEvent());
+                        RegisterFieldOrderingsEvent.post();
                         initialized = true;
                     }
                 }

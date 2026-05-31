@@ -1,6 +1,6 @@
 package dev.shadowsoffire.placebo.dynreg;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import com.mojang.serialization.Codec;
 

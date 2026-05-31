@@ -4,41 +4,21 @@ import com.mojang.blaze3d.vertex.PoseStack;
 
 import dev.shadowsoffire.placebo.Placebo;
 import dev.shadowsoffire.placebo.patreon.PatreonUtils.WingType;
-import dev.shadowsoffire.placebo.patreon.WingsManager;
-import net.minecraft.client.entity.ClientAvatarEntity;
+import net.fabricmc.fabric.api.client.rendering.v1.FabricRenderState;
+import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
 import net.minecraft.client.model.player.PlayerModel;
-import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.context.ContextKey;
-import net.minecraft.world.entity.Avatar;
-import net.neoforged.neoforge.client.renderstate.AvatarRenderStateModifier;
-import net.neoforged.neoforge.client.renderstate.RegisterRenderStateModifiersEvent;
 
 public class WingLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
 
-    public static final ContextKey<WingRenderData> WING_DATA = new ContextKey<>(Placebo.loc("wings/render_data"));
-
-    public static void registerModifier(RegisterRenderStateModifiersEvent e) {
-        e.registerAvatarEntityModifier(new AvatarRenderStateModifier(){
-            @Override
-            public <T extends Avatar & ClientAvatarEntity> void accept(T avatar, AvatarRenderState state) {
-                if (avatar instanceof AbstractClientPlayer player) {
-
-                    if (WingsManager.DISABLED.contains(player.getUUID())) {
-                        return;
-                    }
-                    WingType type = WingsManager.getType(player.getUUID());
-                    if (type != null) {
-                        state.setRenderData(WING_DATA, new WingRenderData(type, type.textureGetter.apply(player)));
-                    }
-                }
-            }
-        });
-    }
+    // Fabric: NeoForge's ContextKey render-state slot becomes a RenderStateDataKey; the value is stored on the render
+    // state via the FabricRenderState interface (auto-applied to all vanilla render states). The state is populated by
+    // AvatarRendererMixin (replacing NeoForge's RegisterRenderStateModifiersEvent / AvatarRenderStateModifier).
+    public static final RenderStateDataKey<WingRenderData> WING_DATA = RenderStateDataKey.create(() -> Placebo.loc("wings/render_data").toString());
 
     public WingLayer(RenderLayerParent<AvatarRenderState, PlayerModel> playerRenderer) {
         super(playerRenderer);
@@ -46,7 +26,7 @@ public class WingLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
 
     @Override
     public void submit(PoseStack stack, SubmitNodeCollector collector, int lightCoords, AvatarRenderState state, float yRot, float xRot) {
-        WingRenderData data = state.getRenderData(WING_DATA);
+        WingRenderData data = ((FabricRenderState) state).getData(WING_DATA);
         if (data == null) {
             return;
         }

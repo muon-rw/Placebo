@@ -58,7 +58,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.primitives.Floats;
 
 import dev.shadowsoffire.placebo.Placebo;
-import net.neoforged.fml.loading.FMLPaths;
+import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * This class offers advanced configurations capabilities, allowing to provide
@@ -103,7 +103,7 @@ public class Configuration {
     }
 
     public Configuration(String modid) {
-        this(new File(FMLPaths.CONFIGDIR.get().toFile(), modid + ".cfg"));
+        this(new File(FabricLoader.getInstance().getConfigDir().toFile(), modid + ".cfg"));
     }
 
     public void setTitle(String title) {

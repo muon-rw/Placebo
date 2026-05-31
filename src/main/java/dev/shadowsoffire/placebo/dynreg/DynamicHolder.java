@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagKey;
 import net.minecraft.core.Holder;
@@ -58,7 +58,7 @@ public class DynamicHolder<R> implements Supplier<R> {
      * Gets the value, if available. This method will resolve the value if possible.
      *
      * @return The target value.
-     * @throws NullPointerException if the value is not {@linkplain #isPresent() present}.
+     * @throws NullPointerException if the value is not {@linkplain #isBound() present}.
      */
     @Override
     public R get() {

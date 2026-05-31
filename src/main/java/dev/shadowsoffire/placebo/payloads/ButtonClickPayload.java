@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import dev.shadowsoffire.placebo.Placebo;
+import dev.shadowsoffire.placebo.network.IPayloadContext;
 import dev.shadowsoffire.placebo.network.PayloadProvider;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.network.ConnectionProtocol;
@@ -14,7 +15,6 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
  * Allows for easy implementations of client->server button presses. Sends an integer that allows for arbitrary data encoding schemes within the integer

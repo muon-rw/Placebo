@@ -6,7 +6,6 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTab.Output;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.ItemLike;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 
 /**
  * An ITabFiller is an item that has been delegated the task of filling creative tabs.
@@ -17,10 +16,12 @@ public interface ITabFiller {
      * Fills a creative tabs will all relevant subitems of this item.<br>
      * This method will only be called for tabs that this tab filler is registered for.
      *
-     * @param tab   The current creative tab being filled.
-     * @param event The contents event, used to add items to the tab.
+     * @param tab    The current creative tab being filled.
+     * @param output The tab output, used to add items to the tab.
      */
-    void fillItemCategory(CreativeModeTab tab, BuildCreativeModeTabContentsEvent evemt);
+    // Fabric: the second param is CreativeModeTab.Output (the common supertype of the Neo
+    // BuildCreativeModeTabContentsEvent and Fabric's FabricCreativeModeTabOutput), so accept(...) works on both.
+    void fillItemCategory(CreativeModeTab tab, Output output);
 
     /**
      * Creates a simple {@link ITabFiller} that populates a tab with the default stack of the item.

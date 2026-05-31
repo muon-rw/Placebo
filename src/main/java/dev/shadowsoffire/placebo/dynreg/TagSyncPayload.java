@@ -9,6 +9,7 @@ import java.util.Optional;
 import org.jetbrains.annotations.ApiStatus;
 
 import dev.shadowsoffire.placebo.Placebo;
+import dev.shadowsoffire.placebo.network.IPayloadContext;
 import dev.shadowsoffire.placebo.network.PayloadProvider;
 import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -17,13 +18,13 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
  * Sync payload for the resolved tag content of a single {@link DynamicRegistry}.
  * <p>
- * Sent server → client during the {@link net.neoforged.neoforge.event.OnDatapackSyncEvent} flow, after the registry's
- * {@code Content} packets but before the {@code End} packet. The client stages the resolved tag map; the {@code End}
+ * Sent server → client during the {@link SyncManagement} sync flow (driven by Fabric's
+ * {@code ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS}), after the registry's {@code Content} packets but before the
+ * {@code End} packet. The client stages the resolved tag map; the {@code End}
  * payload's existing handler binds the staged tags into the registry alongside the staged content.
  */
 public record TagSyncPayload(Identifier id, Map<Identifier, List<Identifier>> tags) implements CustomPacketPayload {

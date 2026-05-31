@@ -20,7 +20,6 @@ import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.data.DataProvider;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
-import net.neoforged.neoforge.common.CommonHooks;
 
 public record FilteredOrderingFactory(Predicate<ParsedPath> pathFilter, Predicate<JsonElement> jsonFilter, Comparator<String> comparator) implements FieldOrderingFactory {
 
@@ -70,7 +69,10 @@ public record FilteredOrderingFactory(Predicate<ParsedPath> pathFilter, Predicat
          */
         public Builder registries(Identifier... registryKeys) {
             for (Identifier id : registryKeys) {
-                this.prefixes.add(CommonHooks.prefixNamespace(id) + "/");
+                // Inlined NeoForge CommonHooks.prefixNamespace, which is exactly vanilla's registry dir path: the path
+                // for minecraft-namespaced keys, else "<namespace>/<path>".
+                String prefix = id.getNamespace().equals("minecraft") ? id.getPath() : id.getNamespace() + "/" + id.getPath();
+                this.prefixes.add(prefix + "/");
             }
             return this;
         }
@@ -85,7 +87,7 @@ public record FilteredOrderingFactory(Predicate<ParsedPath> pathFilter, Predicat
         }
 
         /**
-         * Version of {@link #forObjectSubtype(String, String)} that uses "type" as the key.
+         * Version of {@link #objectSubtype(String, String)} that uses "type" as the key.
          */
         public Builder objectSubtype(String subtype) {
             return objectSubtype("type", subtype);
@@ -193,11 +195,10 @@ public record FilteredOrderingFactory(Predicate<ParsedPath> pathFilter, Predicat
          * Reverse engineers a datagen path into its components by stripping the captured pack output
          * root (see {@link FieldOrderingFactory.Impl#getPackRoot}) and decomposing the remainder.
          * <p>
-         * The output layout depends on the {@code flat} flag passed to
-         * {@link net.neoforged.neoforge.data.loading.DatagenModLoader#begin DatagenModLoader.begin}:
+         * Two output layouts are accepted, so this works regardless of whether a per-mod directory is interposed:
          * <ul>
-         * <li>Non-flat (default): {@code <root>/<modid>/<packtype>/<namespace>/<elementsPath>/<file>.json}</li>
-         * <li>Flat: {@code <root>/<packtype>/<namespace>/<elementsPath>/<file>.json}</li>
+         * <li>Flat (Fabric {@code FabricDataGenerator} output): {@code <root>/<packtype>/<namespace>/<elementsPath>/<file>.json}</li>
+         * <li>Non-flat: {@code <root>/<modid>/<packtype>/<namespace>/<elementsPath>/<file>.json}</li>
          * </ul>
          * Returns {@code null} if the path is not under the known root or doesn't match either layout.
          */

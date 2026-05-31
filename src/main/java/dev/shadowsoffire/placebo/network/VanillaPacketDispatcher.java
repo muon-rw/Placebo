@@ -1,25 +1,24 @@
 package dev.shadowsoffire.placebo.network;
 
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 public class VanillaPacketDispatcher {
 
     /**
-     * Sends a {@link SUpdateTileEntityPacket} to all players watching this tile entity.
+     * Sends the block entity's vanilla update packet to all players watching it.
      */
     public static void dispatchTEToNearbyPlayers(BlockEntity tile) {
-        ServerLevel world = (ServerLevel) tile.getLevel();
-        world.getChunkSource().chunkMap.getPlayers(ChunkPos.containing(tile.getBlockPos()), false).forEach(player -> {
+        // PlayerLookup.tracking is the Fabric equivalent of NeoForge's chunkMap.getPlayers(ChunkPos, false).
+        PlayerLookup.tracking(tile).forEach(player -> {
             player.connection.send(tile.getUpdatePacket());
         });
     }
 
     /**
-     * Sends a {@link SUpdateTileEntityPacket} to all players watching this tile entity.
+     * Sends the block entity's vanilla update packet to all players watching it.
      */
     public static void dispatchTEToNearbyPlayers(Level world, BlockPos pos) {
         BlockEntity tile = world.getBlockEntity(pos);

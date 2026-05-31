@@ -1,5 +1,5 @@
 {
-	"key.categories.placebo": "Placebo",
+	"key.category.placebo.keys": "Placebo",
 	"placebo.toggleTrails": "Attiva/Disattiva Patreon Trails",
 	"placebo.toggleWings": "Attiva/Disattiva Patreon Wings",
 	"placebo.cmd.serialize_success": "Salvato %s in %s.",

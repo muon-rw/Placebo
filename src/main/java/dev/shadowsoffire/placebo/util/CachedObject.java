@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.resources.Identifier;

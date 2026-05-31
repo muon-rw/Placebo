@@ -26,3 +26,7 @@ logs
 /.apt_generated/
 /.apt_generated_tests/
 /runs
+
+# MixinMCP auto-injected rules
+.cursor
+.claude

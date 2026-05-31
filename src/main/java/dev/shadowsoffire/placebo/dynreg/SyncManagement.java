@@ -8,12 +8,12 @@ import java.util.function.Consumer;
 import org.jetbrains.annotations.ApiStatus;
 
 import dev.shadowsoffire.placebo.Placebo;
+import dev.shadowsoffire.placebo.util.PlaceboServer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.Identifier;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.OnDatapackSyncEvent;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
+import net.minecraft.server.level.ServerPlayer;
 
 /**
  * Internal class for sync management.
@@ -39,7 +39,9 @@ class SyncManagement {
                 throw new UnsupportedOperationException("Attempted to register the JSON Reload Listener for syncing " + listener.id + " but one already exists!");
             }
             if (SYNC_REGISTRY.isEmpty()) {
-                NeoForge.EVENT_BUS.addListener(SyncManagement::syncAll);
+                // Fabric divergence: NeoForge added a single OnDatapackSyncEvent listener to its game bus on the first
+                // synced registry; the equivalent Fabric event is SYNC_DATA_PACK_CONTENTS (see syncAll for semantics).
+                ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register(SyncManagement::syncAll);
             }
             SYNC_REGISTRY.put(listener.id, listener);
         }
@@ -126,7 +128,7 @@ class SyncManagement {
      * @implNote Only called on the logical client.
      */
     public static void endSync(Identifier id) {
-        if (ServerLifecycleHooks.getCurrentServer() != null) {
+        if (PlaceboServer.getCurrentServer() != null) {
             // On a singleplayer host, we have to re-register a copy of the original data instead of the synced data
             // since the synced data may not contain the "full" information from the server.
             ifPresent(id, DynamicRegistry::processIntegratedClientReload);
@@ -147,7 +149,14 @@ class SyncManagement {
         }
     }
 
-    private static void syncAll(OnDatapackSyncEvent e) {
-        SYNC_REGISTRY.values().forEach(r -> r.sync(e));
+    /**
+     * Syncs every registered synced registry to a single player.
+     * <p>
+     * Fabric divergence: replaces NeoForge's {@code syncAll(OnDatapackSyncEvent)}. The event fires per player (on login
+     * and once per online player on {@code /reload}) and never passes {@code null}, so each invocation drives a per-player
+     * send; {@link DynamicRegistry#sync(ServerPlayer)} dispatches to that single player.
+     */
+    private static void syncAll(ServerPlayer player, boolean joined) {
+        SYNC_REGISTRY.values().forEach(r -> r.sync(player));
     }
 }

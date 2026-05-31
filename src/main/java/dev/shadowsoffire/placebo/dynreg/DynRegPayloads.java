@@ -8,6 +8,7 @@ import org.jetbrains.annotations.ApiStatus;
 import com.mojang.datafixers.util.Either;
 
 import dev.shadowsoffire.placebo.Placebo;
+import dev.shadowsoffire.placebo.network.IPayloadContext;
 import dev.shadowsoffire.placebo.network.PayloadProvider;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -18,8 +19,6 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
-import net.neoforged.neoforge.network.connection.ConnectionType;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 @ApiStatus.Internal
 public class DynRegPayloads {
@@ -124,7 +123,9 @@ public class DynRegPayloads {
 
             @Override
             public void handleClient(Content<?> msg, IPayloadContext ctx) {
-                RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(msg.item.right().get(), ctx.player().registryAccess(), ConnectionType.NEOFORGE);
+                // Fabric divergence: this MC version's RegistryFriendlyByteBuf has only the 2-arg (ByteBuf, RegistryAccess)
+                // ctor; NeoForge's 3rd ConnectionType.NEOFORGE arg does not exist, so it is dropped.
+                RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(msg.item.right().get(), ctx.player().registryAccess());
 
                 try {
                     V value = SyncManagement.readItem(msg.id, buf);

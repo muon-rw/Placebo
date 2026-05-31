@@ -10,10 +10,10 @@ import dev.shadowsoffire.placebo.PlaceboClient;
 import dev.shadowsoffire.placebo.dynreg.DynamicRegistry;
 import dev.shadowsoffire.placebo.dynreg.RegistrySerializer;
 import dev.shadowsoffire.placebo.systems.mixes.JsonMix.Type;
+import dev.shadowsoffire.placebo.util.PlaceboEnvironment;
+import dev.shadowsoffire.placebo.util.PlaceboServer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.world.item.alchemy.PotionBrewing;
-import net.neoforged.fml.loading.FMLEnvironment;
-import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 public class MixRegistry extends DynamicRegistry<JsonMix<?>> {
 
@@ -40,7 +40,7 @@ public class MixRegistry extends DynamicRegistry<JsonMix<?>> {
     }
 
     /**
-     * Called externally during the {@link ServerAboutToStartEvent} since the first reload on dedi is too early.
+     * Called externally during {@link ServerLifecycleEvents#SERVER_STARTING} since the first reload on dedi is too early.
      */
     public static void applyMixes() {
         for (PotionBrewing brewing : resolveBrewing()) {
@@ -55,12 +55,12 @@ public class MixRegistry extends DynamicRegistry<JsonMix<?>> {
      */
     private static List<@Nullable PotionBrewing> resolveBrewing() {
         List<PotionBrewing> registries = new ArrayList<>();
-        if (FMLEnvironment.getDist().isClient()) {
+        if (PlaceboEnvironment.isClient()) {
             registries.add(PlaceboClient.getBrewingRegistry());
         }
 
-        if (ServerLifecycleHooks.getCurrentServer() != null) {
-            registries.add(ServerLifecycleHooks.getCurrentServer().potionBrewing());
+        if (PlaceboServer.getCurrentServer() != null) {
+            registries.add(PlaceboServer.getCurrentServer().potionBrewing());
         }
 
         return registries;

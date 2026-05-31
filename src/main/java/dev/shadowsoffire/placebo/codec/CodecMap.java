@@ -1,6 +1,6 @@
 package dev.shadowsoffire.placebo.codec;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;

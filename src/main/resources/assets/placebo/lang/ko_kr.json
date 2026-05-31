@@ -1,5 +1,5 @@
 {
-	"key.categories.placebo": "플라시보",
+	"key.category.placebo.keys": "플라시보",
 	"placebo.toggleTrails": "패트론 잔상 장착",
 	"placebo.toggleWings": "패트론 날개 장착",
 	"placebo.cmd.serialize_success": "%s을(를) %s에 저장했습니다.",

@@ -8,29 +8,41 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
+import net.fabricmc.fabric.api.datagen.v1.FabricDataGenerator;
+import net.fabricmc.fabric.api.datagen.v1.FabricPackOutput;
+import net.fabricmc.fabric.api.datagen.v1.provider.FabricDynamicRegistryProvider;
+import net.fabricmc.fabric.api.resource.conditions.v1.ResourceCondition;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistrySetBuilder;
 import net.minecraft.core.RegistrySetBuilder.RegistryBootstrap;
-import net.minecraft.data.DataGenerator;
 import net.minecraft.data.DataProvider;
 import net.minecraft.data.PackOutput;
 import net.minecraft.resources.ResourceKey;
-import net.neoforged.neoforge.common.conditions.ICondition;
-import net.neoforged.neoforge.common.data.DatapackBuiltinEntriesProvider;
-import net.neoforged.neoforge.data.event.GatherDataEvent;
 
 /**
- * Builder to help adding multiple {@link RegistryBootstrap}s and {@link DataProvider}s to the {@link GatherDataEvent}.
+ * Builder to help adding multiple {@link RegistryBootstrap}s and {@link DataProvider}s to a Fabric data generation run.
  * <p>
- * Handles creation of the {@link DatapackBuiltinEntriesProvider} and passing the correct {@link HolderLookup.Provider} to the data providers.
+ * Bootstraps are replayed into the run's {@link RegistrySetBuilder} via {@link #buildRegistries(RegistrySetBuilder)}, and
+ * the generated objects (filtered by namespace) are written out by {@link #build(FabricDataGenerator)} through a private
+ * {@link FabricDynamicRegistryProvider}, reproducing the NeoForge {@code DatapackBuiltinEntriesProvider} semantics.
  */
 public class DataGenBuilder {
 
+    /**
+     * The number of spaces used to indent generated JSON, read by {@code DataProviderMixin} when writing files.
+     * <p>
+     * Defaults to {@code 2} to match vanilla {@code DataProvider.saveStable}. Replaces the NeoForge
+     * {@code DataProvider.INDENT_WIDTH} field (which does not exist in vanilla 26.1); consumers that committed 4-space
+     * datagen output set this to {@code 4} at the top of their data generation. Like the NeoForge field it is a
+     * {@link ThreadLocal} because saves run concurrently on {@link net.minecraft.util.Util#backgroundExecutor()}.
+     */
+    public static final ThreadLocal<Integer> INDENT_WIDTH = ThreadLocal.withInitial(() -> 2);
+
     protected final Set<String> registrySetModids;
-    protected final RegistrySetBuilder registrySet = new RegistrySetBuilder();
+    protected final List<RegistryEntry<?>> registries = new ArrayList<>();
     protected final List<DataProviderFactory<?>> providers = new ArrayList<>();
-    protected final Map<ResourceKey<?>, List<ICondition>> conditions = new IdentityHashMap<>();
+    protected final Map<ResourceKey<?>, List<ResourceCondition>> conditions = new IdentityHashMap<>();
 
     /**
      * Creates a new {@link DataGenBuilder}.
@@ -53,7 +65,7 @@ public class DataGenBuilder {
      * @return this
      */
     public <R> DataGenBuilder registry(ResourceKey<? extends Registry<R>> key, RegistrySetBuilder.RegistryBootstrap<R> bootstrap) {
-        this.registrySet.add(key, bootstrap);
+        this.registries.add(new RegistryEntry<>(key, bootstrap));
         return this;
     }
 
@@ -66,8 +78,8 @@ public class DataGenBuilder {
      * @param conditions The list of conditions to apply. Earlier conditions will be evaluated first.
      * @return
      */
-    public DataGenBuilder conditions(ResourceKey<?> key, List<ICondition> conditions) {
-        List<ICondition> existing = this.conditions.computeIfAbsent(key, k -> new ArrayList<>());
+    public DataGenBuilder conditions(ResourceKey<?> key, List<ResourceCondition> conditions) {
+        List<ResourceCondition> existing = this.conditions.computeIfAbsent(key, k -> new ArrayList<>());
         existing.addAll(conditions);
         return this;
     }
@@ -75,15 +87,15 @@ public class DataGenBuilder {
     /**
      * Vararg overload of {@link #conditions(ResourceKey, List)}
      */
-    public DataGenBuilder conditions(ResourceKey<?> key, ICondition... conditions) {
+    public DataGenBuilder conditions(ResourceKey<?> key, ResourceCondition... conditions) {
         return conditions(key, Arrays.asList(conditions));
     }
 
     /**
      * Map overload of {@link #conditions(ResourceKey, List)} which allows providing conditions for many entries at once.
      */
-    public DataGenBuilder conditions(Map<ResourceKey<?>, List<ICondition>> conditions) {
-        for (Map.Entry<ResourceKey<?>, List<ICondition>> entry : conditions.entrySet()) {
+    public DataGenBuilder conditions(Map<ResourceKey<?>, List<ResourceCondition>> conditions) {
+        for (Map.Entry<ResourceKey<?>, List<ResourceCondition>> entry : conditions.entrySet()) {
             this.conditions(entry.getKey(), entry.getValue());
         }
         return this;
@@ -109,22 +121,100 @@ public class DataGenBuilder {
     }
 
     /**
-     * Builds the resulting data providers and registers them to the {@link GatherDataEvent}.
+     * Replays the stored {@link RegistryBootstrap}s into the data generation run's {@link RegistrySetBuilder} so the
+     * generated objects appear in the run registries returned by {@link FabricDataGenerator#getRegistries()}.
+     * <p>
+     * Consumers call this from {@code DataGeneratorEntrypoint.buildRegistry(RegistrySetBuilder)}. This replaces the
+     * NeoForge mechanism where the builder owned a standalone {@link RegistrySetBuilder} patched into a
+     * {@code DatapackBuiltinEntriesProvider}; on Fabric the bootstraps must instead land in the shared run builder.
+     *
+     * @param runBuilder The run's registry set builder.
      */
-    public void build(GatherDataEvent event) {
-        this.registerDataProviders(event);
+    public void buildRegistries(RegistrySetBuilder runBuilder) {
+        for (RegistryEntry<?> entry : this.registries) {
+            entry.addTo(runBuilder);
+        }
     }
 
-    protected void registerDataProviders(GatherDataEvent event) {
-        PackOutput output = event.getGenerator().getPackOutput();
+    /**
+     * Builds the resulting data providers and registers them to the Fabric data generation run.
+     * <p>
+     * Consumers call this from {@code DataGeneratorEntrypoint.onInitializeDataGenerator(FabricDataGenerator)}. Replaces
+     * the NeoForge {@code build(GatherDataEvent)}: a private {@link FabricDynamicRegistryProvider} writes out the
+     * {@link #registry(ResourceKey, RegistryBootstrap)} content (filtered by namespace, with conditions applied), and
+     * each {@link #provider(DataProviderFactory)} factory is added through the pack.
+     *
+     * @param gen The Fabric data generator for the current run.
+     */
+    public void build(FabricDataGenerator gen) {
+        FabricDataGenerator.Pack pack = gen.createPack();
 
-        DatapackBuiltinEntriesProvider datapackProvider = new DatapackBuiltinEntriesProvider(output, event.getLookupProvider(), this.registrySet, this.conditions, this.registrySetModids);
-        CompletableFuture<HolderLookup.Provider> registries = datapackProvider.getRegistryProvider();
+        if (!this.registries.isEmpty()) {
+            pack.addProvider((output, registries) -> {
+                FieldOrderingFactory.Impl.setPackRoot(output.getOutputFolder());
+                return new RegistryWriter(output, registries);
+            });
+        }
 
-        DataGenerator generator = event.getGenerator();
-        generator.addProvider(true, datapackProvider);
         for (DataProviderFactory<?> factory : this.providers) {
-            generator.addProvider(true, factory.create(output, registries));
+            pack.addProvider((output, registries) -> {
+                FieldOrderingFactory.Impl.setPackRoot(output.getOutputFolder());
+                return factory.create(output, registries);
+            });
+        }
+    }
+
+    /**
+     * Writes the entries produced by the stored {@link RegistryBootstrap}s, mirroring the NeoForge
+     * {@code DatapackBuiltinEntriesProvider}: only entries whose namespace is in {@link #registrySetModids} are written,
+     * each with the conditions registered against its {@link ResourceKey} via {@link #conditions(ResourceKey, List)}.
+     */
+    private class RegistryWriter extends FabricDynamicRegistryProvider {
+
+        private RegistryWriter(FabricPackOutput output, CompletableFuture<HolderLookup.Provider> registriesFuture) {
+            super(output, registriesFuture);
+        }
+
+        @Override
+        protected void configure(HolderLookup.Provider registries, Entries entries) {
+            for (RegistryEntry<?> entry : DataGenBuilder.this.registries) {
+                writeRegistry(registries, entries, entry.key());
+            }
+        }
+
+        /**
+         * Enumerates every element key in {@code registryKey}'s run lookup, and re-adds the ones in our namespaces with
+         * their conditions. The {@code <T>} method captures the element type so {@code Entries.add} type-checks against
+         * the wildcard registry key stored in {@link RegistryEntry}.
+         */
+        private <T> void writeRegistry(HolderLookup.Provider registries, Entries entries, ResourceKey<? extends Registry<T>> registryKey) {
+            HolderLookup.RegistryLookup<T> lookup = registries.lookupOrThrow(registryKey);
+            lookup.listElementIds().forEach(elementKey -> {
+                if (DataGenBuilder.this.registrySetModids.contains(elementKey.identifier().getNamespace())) {
+                    entries.add(lookup, elementKey, conditionsFor(elementKey));
+                }
+            });
+        }
+
+        private ResourceCondition[] conditionsFor(ResourceKey<?> key) {
+            List<ResourceCondition> stored = DataGenBuilder.this.conditions.get(key);
+            return stored == null ? new ResourceCondition[0] : stored.toArray(new ResourceCondition[0]);
+        }
+
+        @Override
+        public String getName() {
+            return "Placebo Dynamic Registries";
+        }
+    }
+
+    /**
+     * Holds a {@link #registry(ResourceKey, RegistryBootstrap)} call: the registry key and its bootstrap, retained so the
+     * bootstrap can be replayed into the run's {@link RegistrySetBuilder} (it is not built standalone like on NeoForge).
+     */
+    protected record RegistryEntry<R>(ResourceKey<? extends Registry<R>> key, RegistrySetBuilder.RegistryBootstrap<R> bootstrap) {
+
+        private void addTo(RegistrySetBuilder runBuilder) {
+            runBuilder.add(this.key, this.bootstrap);
         }
     }
 

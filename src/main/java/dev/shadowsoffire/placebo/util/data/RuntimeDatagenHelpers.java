@@ -12,8 +12,8 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.JsonOps;
 
 import dev.shadowsoffire.placebo.codec.CodecProvider;
+import dev.shadowsoffire.placebo.util.PlaceboEnvironment;
 import net.minecraft.resources.Identifier;
-import net.neoforged.fml.loading.FMLPaths;
 
 /**
  * Code that allows for datagen of files at runtime.
@@ -73,7 +73,7 @@ public class RuntimeDatagenHelpers {
      * @throws IllegalStateException if the disk write fails
      */
     public static void write(JsonElement json, String type, Identifier key) {
-        File file = new File(FMLPaths.GAMEDIR.get().toFile(), "datagen/" + key.getNamespace() + "/" + type + "/" + key.getPath() + ".json");
+        File file = new File(PlaceboEnvironment.getGameDir().toFile(), "datagen/" + key.getNamespace() + "/" + type + "/" + key.getPath() + ".json");
         file.getParentFile().mkdirs();
         try (FileWriter writer = new FileWriter(file)) {
             JsonWriter jWriter = new JsonWriter(writer);

@@ -6,7 +6,6 @@ import java.util.Optional;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
-import dev.shadowsoffire.placebo.systems.gear.GearSet;
 import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -17,7 +16,7 @@ import net.minecraft.world.item.ItemStackTemplate;
 /**
  * A Weighted ItemStack is a combination of an item stack with a weight and drop chance.
  * <p>
- * Primarily for use in {@link GearSet}.
+ * Primarily for use in {@code GearSet}.
  */
 public record WeightedItemStack(Optional<ItemStackTemplate> stack, int weight, float dropChance) {
 

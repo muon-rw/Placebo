@@ -11,7 +11,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.MustBeInvokedByOverriders;
@@ -26,28 +26,33 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.JsonOps;
 
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicHolderSet;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagKey;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
 import dev.shadowsoffire.placebo.json.JsonUtil;
+import dev.shadowsoffire.placebo.util.PlaceboServer;
 import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.CodecException;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.ReloadableServerResources;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.common.conditions.ConditionalOps;
-import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
-import net.neoforged.neoforge.event.OnDatapackSyncEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * A Dynamic Registry is a reload listener which acts like a registry. Unlike datapack registries, it can reload.
@@ -177,11 +182,16 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
     @Override
     protected final void apply(Map<Identifier, JsonElement> objects, ResourceManager pResourceManager, ProfilerFiller pProfiler) {
         this.beginReload(ReloadType.SERVER);
-        ConditionalOps<JsonElement> ops = this.makeConditionalOps();
+        // Fabric divergence: NeoForge's ContextAwareReloadListener#makeConditionalOps captured the registry access from
+        // the reload context. Fabric has no such hook, so the ops are built from the running server's registry access
+        // (non-null during a datapack reload). The RegistryInfoLookup feeds JsonUtil#checkConditions; the RegistryOps is
+        // used to decode entries (cross-registry deps require populated registries, which is why this runs in apply()).
+        RegistryOps<JsonElement> ops = this.makeOps();
+        RegistryOps.RegistryInfoLookup registryInfo = this.makeRegistryInfo();
         Codec<R> codec = this.serializer.codec();
         objects.forEach((key, ele) -> {
             try {
-                if (JsonUtil.checkAndLogEmpty(ele, key, this.id, this.logger) && JsonUtil.checkConditions(ele, key, this.id, this.logger, ops)) {
+                if (JsonUtil.checkAndLogEmpty(ele, key, this.id, this.logger) && JsonUtil.checkConditions(ele, key, this.id, this.logger, registryInfo)) {
                     JsonObject obj = ele.getAsJsonObject();
                     R deserialized = codec.decode(ops, obj).getOrThrow(this::makeCodecException).getFirst();
                     this.register(key, deserialized);
@@ -193,6 +203,40 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
             }
         });
         this.onReload(ReloadType.SERVER);
+    }
+
+    /**
+     * Builds a {@link RegistryOps} over {@link JsonOps} backed by the running server's registry access, used to decode
+     * entries with full registry context. Falls back to {@code RegistryAccess.EMPTY} if no server is running.
+     * <p>
+     * Fabric replacement for NeoForge's {@code ContextAwareReloadListener#makeConditionalOps}.
+     */
+    private RegistryOps<JsonElement> makeOps() {
+        return this.registryLookup().createSerializationContext(JsonOps.INSTANCE);
+    }
+
+    /**
+     * Derives the {@link RegistryOps.RegistryInfoLookup} consumed by {@link JsonUtil#checkConditions}. Built directly
+     * from the {@link HolderLookup.Provider} (mirroring vanilla's {@code RegistryOps.HolderLookupAdapter}) rather than
+     * reflected out of {@link #makeOps()}, since {@code RegistryOps#lookupProvider} is not public API.
+     */
+    private RegistryOps.RegistryInfoLookup makeRegistryInfo() {
+        HolderLookup.Provider provider = this.registryLookup();
+        return new RegistryOps.RegistryInfoLookup() {
+            @Override
+            public <T> Optional<RegistryOps.RegistryInfo<T>> lookup(ResourceKey<? extends Registry<? extends T>> registryKey) {
+                return provider.lookup(registryKey).map(RegistryOps.RegistryInfo::fromRegistryLookup);
+            }
+        };
+    }
+
+    /**
+     * @return The {@link HolderLookup.Provider} for the running server, or {@link RegistryAccess#EMPTY} if none is
+     *         running. The server is present during a datapack reload, mirroring the NeoForge behavior.
+     */
+    private HolderLookup.Provider registryLookup() {
+        MinecraftServer server = PlaceboServer.getCurrentServer();
+        return server != null ? server.registryAccess() : RegistryAccess.EMPTY;
     }
 
     /**
@@ -266,12 +310,18 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
     /**
      * Registers this listener to the event bus as is appropriate.
      * This should be called for ALL listeners from common setup.
+     * <p>
+     * Fabric divergence: NeoForge added the listener per-reload via the game-bus {@code AddServerReloadListenersEvent}.
+     * Fabric has no such event, so the listener is registered once here via {@link ResourceLoader}, and a tag-manager
+     * dependency edge is declared so registry content is deserialized before {@link DynamicTagManager} loads tags.
      */
     public void registerToBus() {
         if (this.serializer.isSynced()) {
             SyncManagement.registerForSync(this);
         }
-        NeoForge.EVENT_BUS.addListener(this::addReloader);
+        ResourceLoader loader = ResourceLoader.get(PackType.SERVER_DATA);
+        loader.registerReloadListener(this.id, this);
+        loader.addListenerOrdering(this.id, DynamicTagManager.ID);
     }
 
     /**
@@ -452,17 +502,6 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
     protected void validateItem(Identifier key, R value) {}
 
     /**
-     * Adds this reload listener to the {@link ReloadableServerResources}.
-     * <p>
-     * Also adds a dependency edge to {@link DynamicTagManager} so that tag loading runs after registry content has
-     * been deserialized.
-     */
-    private void addReloader(AddServerReloadListenersEvent e) {
-        e.addListener(this.id, this);
-        e.addDependency(this.id, DynamicTagManager.ID);
-    }
-
-    /**
      * Replaces the contents of the live registry with the staging registry.<br>
      * This triggers the full reload process for the client.
      *
@@ -508,12 +547,16 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
     }
 
     /**
-     * Sync event handler. Sends the start packet, a content packet for each item, a tag-sync packet
-     * (if any tags are bound), and then the end packet.
+     * Sends the start packet, a content packet for each item, a tag-sync packet (if any tags are bound), and then the
+     * end packet, to a single player.
+     * <p>
+     * Fabric divergence: NeoForge's {@code OnDatapackSyncEvent} carried a nullable player ({@code null} = broadcast on
+     * {@code /reload}). Fabric's {@code ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS} always supplies exactly one
+     * player and fires once per online player on {@code /reload}, so this is now a per-player send; {@link SyncManagement}
+     * drives it once per player. Dispatch goes through {@code ServerPlayNetworking} (the foundation payload framework).
      */
-    void sync(OnDatapackSyncEvent e) {
-        ServerPlayer player = e.getPlayer();
-        Consumer<CustomPacketPayload> target = player == null ? PacketDistributor::sendToAllPlayers : payload -> PacketDistributor.sendToPlayer(player, payload);
+    void sync(ServerPlayer player) {
+        Consumer<CustomPacketPayload> target = payload -> ServerPlayNetworking.send(player, payload);
 
         target.accept(new DynRegPayloads.Start(this.id));
         this.registry.forEach((k, v) -> {

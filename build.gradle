@@ -1,342 +1,103 @@
 plugins {
-    id 'java-library'
+    id 'net.fabricmc.fabric-loom' version '1.16-SNAPSHOT'
     id 'maven-publish'
-    id 'net.neoforged.moddev' version '2.0.141'
-    id 'com.diffplug.eclipse.apt' version '3.42.2'
-    id 'net.darkhax.curseforgegradle' version '1.1.18'
-    id 'eclipse'
+    id 'dev.mixinmcp.decompile' version '1.0.3'
 }
 
 base {
-    archivesName = "${fileName}-${mcVersion}"
+    archivesName = "${fileName}-${mc_version}"
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(project.properties.javaVersion)
-
-// Forward declaration of generateModMetadata for use in the neoForge block. Definition is below.
-var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {}
-
-neoForge {
-    version = project.properties.forgeVersion
-
-    mods {
-        create(project.name) {
-            sourceSet project.sourceSets.main
-        }
-    }
-
-    runs {
-        configureEach {
-            logLevel = org.slf4j.event.Level.DEBUG
-            taskBefore generateModMetadata
-        }
-
-        client {
-            client()
-            systemProperty 'forge.enabledGameTestNamespaces', "${modid}"
-            ideName = "${project.name} - Client"
-        }
-
-        server {
-            server()
-            systemProperty 'forge.enabledGameTestNamespaces', "${modid}"
-            programArgument '--nogui'
-            ideName = "${project.name} - Server"
-        }
-
-        data {
-            clientData()
-            programArguments.addAll '--mod', "${modid}", '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
-            ideName = "${project.name} - Data"
-        }
-    }
-
-    ideSyncTask generateModMetadata
-
-    neoFormRuntime {
-        useEclipseCompiler = false // Allows for parallelism on recompile - disabled due to a bug.
-    }
-}
+group = project.modGroup
 
 repositories {
+    mavenCentral()
     maven {
-        // CurseForge
-        url "https://www.cursemaven.com"
-        content {
-            includeGroup "curse.maven"
-        }
-    }
-    maven {
-        // Curios
-        url "https://maven.theillusivec4.top"
-        content {
-            includeGroupByRegex "top\\.theillusivec4.*"
-        }
-    }
-    maven {
-        // The One Probe
-        url "https://maven.k-4u.nl"
-        content {
-            includeGroup "mcjty.theoneprobe"
-        }
-    }
-    maven {
-        // Patchouli
-        url "https://maven.blamejared.com"
-        content {
-            includeGroup "vazkii.patchouli"
-            includeGroupByRegex "net\\.darkhax.*"
-            includeGroupByRegex "com\\.blamejared.*"
-            includeGroup "org.openzen.zencode"
-            includeGroup "mezz.jei"
-        }
-    }
-    maven {
-        // Shadows
-        url "https://maven.shadowsoffire.dev/releases"
+        url = "https://maven.shadowsoffire.dev/releases"
         content {
             includeGroup "dev.shadowsoffire"
             includeGroup "snownee.jade"
         }
     }
-}
-
-configurations {
-    compileClasspath.extendsFrom localImplementation
-    runtimeClasspath.extendsFrom localImplementation
-    runtimeClasspath.extendsFrom localRuntime
+    exclusiveContent {
+        forRepository {
+            maven {
+                url = "https://api.modrinth.com/maven"
+            }
+        }
+        filter {
+            includeGroup "maven.modrinth"
+        }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                url = "https://cursemaven.com"
+            }
+        }
+        filter {
+            includeGroup "curse.maven"
+        }
+    }
+    maven {url = 'https://maven.nucleoid.xyz/releases'}
+    maven {url = 'https://maven.blamejared.com'}
 }
 
 dependencies {
-    if (project.mixin.toBoolean())                   annotationProcessor "org.spongepowered:mixin:${mixinVersion}:processor"
-    if (project.hasProperty('placeboVersion'))       implementation      "dev.shadowsoffire:Placebo:${mcVersion}-${placeboVersion}"
-    if (project.hasProperty('jeiVersion'))           localImplementation "mezz.jei:jei-${mcVersion}-neoforge:${jeiVersion}"
-    if (project.hasProperty('jadeVersion'))          localImplementation "snownee.jade:Jade-NeoForge:${mcVersion}-${jadeVersion}"
-    if (project.hasProperty('curiosVersion'))        implementation      "top.theillusivec4.curios:curios-neoforge:${curiosVersion}"
-    if (project.hasProperty('patchouliVersion'))     implementation      "vazkii.patchouli:Patchouli:${patchouliVersion}"
-    if (project.hasProperty('bookshelfVersion'))     localImplementation "net.darkhax.bookshelf:Bookshelf-Forge-${mcVersion}:${bookshelfVersion}"
-    if (project.hasProperty('gamestagesVersion'))    localImplementation "net.darkhax.gamestages:GameStages-Forge-${mcVersion}:${gamestagesVersion}"
-    if (project.hasProperty('twilightFileId'))       localImplementation "curse.maven:the-twilight-forest-227639:${twilightFileId}"
-    if (project.hasProperty('gatewaysVersion'))      localImplementation "dev.shadowsoffire:GatewaysToEternity:${mcVersion}-${gatewaysVersion}"
-    if (project.hasProperty('attributeslibVersion')) implementation      "dev.shadowsoffire:ApothicAttributes:${mcVersion}-${attributeslibVersion}"
+    minecraft "com.mojang:minecraft:${mc_version}"
+    implementation "net.fabricmc:fabric-loader:${fabric_loader}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api}"
+    implementation "eu.pb4:trinkets:${trinkets_version}"
+    localRuntime "mezz.jei:jei-${mc_version}-fabric:${jei_version}"
+    localRuntime "curse.maven:jade-324717:8048381"
 }
 
-tasks.named("generateModMetadata") {
-    inputs.dir('src/templates')
+loom {
+    accessWidenerPath = file("src/main/resources/placebo.accesswidener")
+}
 
-    def mixinPath = "${project.projectDir}/src/main/java/${modGroup}/${modid}/mixin".replaceAll('\\.', '/')
-
-    if (file(mixinPath).exists()) {
-        inputs.dir(mixinPath)
-    }
-
-    def replaceProperties = [
-        modGroup: modGroup,
-        modid: modid,
-        version: version,
-        modName: modName,
-        author: author,
-        desc: desc,
-        mcVersion: mcVersion,
-        javaVersion: javaVersion,
-        forgeVersion: forgeVersion
-    ]
-
-    def licenseFile = file('LICENSE')
-    if (!licenseFile.exists()) {
-        throw new Exception('Missing LICENSE file in repository root.')
-    }
-    replaceProperties.put 'license', file('LICENSE').readLines().get(0)
-
-    if (project.hasProperty('placeboVersion'))       replaceProperties.put 'placeboVersion', placeboVersion
-    if (project.hasProperty('attributeslibVersion')) replaceProperties.put 'attributeslibVersion', attributeslibVersion
-    if (project.hasProperty('curiosVersion'))        replaceProperties.put 'curiosVersion', curiosVersion
-    if (project.hasProperty('topVersion'))           replaceProperties.put 'topVersion', topVersion
-    if (project.hasProperty('patchouliVersion'))     replaceProperties.put 'patchouliVersion', patchouliVersion
-
-    replaceProperties.put 'mixinConfig', project.mixin.toBoolean() ? "[[mixins]]\nconfig=\"${modid}.mixins.json\"" : ""
-
-    inputs.properties replaceProperties
-
-    from("src/templates")
-    into("src/generated/resources")
-
-    filesMatching('neoforge.mods.toml') {
-        expand replaceProperties
-        name 'META-INF/neoforge.mods.toml'
-    }
-
-    // Automatically populate mixins.json from the mixin package and rename to modid.mixins.json
-    filesMatching('mixins.json') {
-        def mixinFiles = []
-        def clientMixinFiles = []
-
-        fileTree(mixinPath).visit { FileVisitDetails details ->
-            def name = details.file.path.replace('\\', '/')
-            name = name.substring(name.indexOf('mixin/') + 'mixin/'.length(), name.length())
-            if(name.endsWith('.java')) {
-                name = name.substring(0, name.length() - '.java'.length())
-                if(name.startsWith('client')) {
-                    clientMixinFiles.add(name)
-                } else {
-                    mixinFiles.add(name)
-                }
-            }
-        }
-
-        def mixins = ''
-        def clientMixins = ''
-
-        for (int i = 0; i < mixinFiles.size(); i++) {
-            def name = mixinFiles[i]
-            name = name.replaceAll('\\/', '.')
-            mixins += '        "' + name + '"'
-            if (i != mixinFiles.size() - 1) {
-                mixins += ',\n'
-            }
-        }
-
-        for (int i = 0; i < clientMixinFiles.size(); i++) {
-            def name = clientMixinFiles[i]
-            name = name.replaceAll('\\/', '.')
-            clientMixins += '        "' + name + '"'
-            if (i != clientMixinFiles.size() - 1) {
-                clientMixins += ',\n'
-            }
-        }
-
-        replaceProperties.put('mixins', mixins)
-        replaceProperties.put('clientMixins', clientMixins)
-
-        expand replaceProperties
-        name "${modid}.mixins.json".toString()
+processResources {
+    inputs.property "version", project.version
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
     }
 }
 
-tasks.named('processResources') {
-    dependsOn generateModMetadata
-}
-
-tasks.withType(Jar) {
-    dependsOn generateModMetadata
-}
-
-sourceSets.main.resources {
-    srcDir 'src/generated/resources'
-}
-
-// Declare an additional sourceset so un-expanded template files are visible in the IDE.
-sourceSets {
-    templates {
-        resources {
-            srcDir 'src/templates'
-        }
-    }
-}
-
-if (!project.enableTests.toBoolean()) {
-    sourceSets.remove(sourceSets.test)
-}
-
-tasks.named('jar', Jar).configure {
-    manifest {
-        attributes([
-            "Specification-Title": project.fileName,
-            "Specification-Vendor": project.author,
-            "Specification-Version": project.version,
-            "Implementation-Title": project.fileName,
-            "Implementation-Version": project.version,
-            "Implementation-Vendor" : project.author,
-            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
-        ])
-    }
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = project.javaVersion as int
+    it.options.encoding = 'UTF-8'
 }
 
 java {
     withSourcesJar()
+    def jv = JavaVersion.toVersion(project.javaVersion)
+    sourceCompatibility = jv
+    targetCompatibility = jv
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
 }
 
 publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId = project.modGroup
+            artifactId = project.fileName
+            version = "${mc_version}-${project.version}"
+            from components.java
+        }
+    }
     repositories {
         maven {
-            name = "shadowsMaven"
-            url = "https://maven.shadowsoffire.dev/releases"
+            name = "Muon"
+            url = "https://maven.muon.rip/releases"
             credentials(PasswordCredentials)
             authentication {
                 basic(BasicAuthentication)
             }
         }
     }
-    publications {
-        mavenJava(MavenPublication) {
-            groupId = "${modGroup}"
-            artifactId = "${fileName}"
-            version = "${mcVersion}-${version}"
-            pom.withXml {
-                def node = asNode()
-                if(node.dependencies.size() > 0)
-                    node.remove(node.dependencies) // Remove deps, as they are all mappings-dependent and/or forge
-            }
-            from components.java
-        }
-    }
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
-}
-
-def getChangelogLink = {
-    def repo = providers.exec {
-        commandLine = ["git", "config", "--get", "remote.origin.url"]
-    }.standardOutput.asText.get().trim()
-
-    def branch = providers.exec {
-        commandLine = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
-    }.standardOutput.asText.get().trim()
-
-    if (!repo.isBlank() && !branch.isBlank()) {
-        return repo.substring(0, repo.length() - 4) + '/blob/' + branch + '/changelog.md'
-    } else {
-        return ''
-    }
-}
-
-// Splits a list of values separated by ', ' (comma + space).
-def splitList(list) {
-    def split = list.split(', ')
-    assert split.length == list.count(',') + 1
-    return split
-}
-
-tasks.register('publishCurseForge', net.darkhax.curseforgegradle.TaskPublishCurseForge).configure {
-    if (project.hasProperty('curseforgeUploadToken') && project.hasProperty('curseforgeProjectId')) {
-        apiToken = getProperty('curseforgeUploadToken')
-        disableVersionDetection()
-    
-        def projectId = getProperty('curseforgeProjectId')
-        def mainFile = upload(projectId, jar)
-        mainFile.changelog = getChangelogLink()
-        mainFile.addModLoader(splitList("${modLoaders}"))
-        mainFile.addJavaVersion("Java ${javaVersion}")
-        mainFile.addGameVersion("${mcVersion}")
-        mainFile.releaseType = "${releaseType}"        
-    
-        if (project.hasProperty('requiredDeps')) {
-            mainFile.addRequirement(splitList("${requiredDeps}"))
-        }
-        if (project.hasProperty('optionalDeps')) {
-            mainFile.addOptional(splitList("${optionalDeps}"))
-        }
-        if (project.hasProperty('incompatibleDeps')) {
-            mainFile.addIncompatibility(splitList("${incompatibleDeps}"))
-        }
-    
-        mainFile.withAdditionalFile(sourcesJar)
-    }
-}
-
-task publishAll() {
-    dependsOn publish
-    dependsOn publishCurseForge
 }

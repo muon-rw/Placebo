@@ -17,14 +17,15 @@ import com.google.gson.JsonParser;
 import com.mojang.serialization.Dynamic;
 
 import dev.shadowsoffire.placebo.dynreg.DynamicRegistry;
+import dev.shadowsoffire.placebo.json.JsonUtil;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.tags.TagEntry;
 import net.minecraft.tags.TagFile;
 import net.minecraft.util.DependencySorter;
-import net.neoforged.neoforge.common.conditions.ConditionalOps;
 
 /**
  * Loads tag JSON files for a single {@link DynamicRegistry} and resolves them into a flat map of tag id → entry id list.
@@ -48,8 +49,15 @@ public final class TagLoader<R> {
     /**
      * Scans the datapack for tag files. Safe to call off-thread during {@code prepare} — does not depend on
      * registry content.
+     * <p>
+     * Fabric divergence: NeoForge passed a {@code ConditionalOps<JsonElement>} that both supplied the registry
+     * context for decoding and stripped/evaluated {@code neoforge:conditions}. Fabric has no {@code ConditionalOps}, so
+     * the registry context is a plain {@link RegistryOps} and the {@code fabric:load_conditions} gate is applied
+     * explicitly via {@link JsonUtil#checkConditions}, mirroring how {@code DynamicRegistry#apply} gates its entries.
+     * The {@code registryInfo} feeds that gate and may be {@code null} (e.g. no server running), which
+     * {@link JsonUtil#checkConditions} tolerates.
      */
-    public Map<Identifier, List<EntryWithSource>> scan(ResourceManager manager, ConditionalOps<JsonElement> ops) {
+    public Map<Identifier, List<EntryWithSource>> scan(ResourceManager manager, RegistryOps<JsonElement> ops, RegistryOps.RegistryInfoLookup registryInfo) {
         Map<Identifier, List<EntryWithSource>> result = new HashMap<>();
         FileToIdConverter lister = FileToIdConverter.json(this.directory);
         for (Map.Entry<Identifier, List<Resource>> entry : lister.listMatchingResourceStacks(manager).entrySet()) {
@@ -58,6 +66,9 @@ public final class TagLoader<R> {
             for (Resource resource : entry.getValue()) {
                 try (Reader reader = resource.openAsReader()) {
                     JsonElement element = JsonParser.parseReader(reader);
+                    if (!JsonUtil.checkConditions(element, id, this.registry.getId(), this.logger, registryInfo)) {
+                        continue;
+                    }
                     TagFile parsed = TagFile.CODEC.parse(new Dynamic<>(ops, element)).getOrThrow();
                     List<EntryWithSource> entries = result.computeIfAbsent(id, k -> new ArrayList<>());
                     if (parsed.replace()) {
@@ -133,12 +144,22 @@ public final class TagLoader<R> {
          */
         boolean build(TagEntry.Lookup<Identifier> lookup, SequencedSet<Identifier> accumulator) {
             if (this.remove) {
-                if (this.entry.isTag()) {
-                    Collection<Identifier> contents = lookup.tag(this.entry.getId());
+                // Fabric divergence: NeoForge added public TagEntry#isTag()/#getId() accessors that this branch used to
+                // distinguish a "#tag" removal (subtract all members) from an element removal (subtract the single id).
+                // Vanilla TagEntry keeps those fields private, so the (isTag, id) pair is recovered by replaying
+                // TagEntry#build against a capturing lookup — build() calls tag(id) for a tag entry and element(id,..)
+                // for an element entry, which is exactly the discriminator the old accessors provided.
+                CapturingLookup capture = new CapturingLookup();
+                this.entry.build(capture, ignored -> {});
+                if (capture.id == null) {
+                    return true; // Defensive: nothing captured (should not happen for a parsed entry).
+                }
+                if (capture.isTag) {
+                    Collection<Identifier> contents = lookup.tag(capture.id);
                     if (contents != null) contents.forEach(accumulator::remove);
                 }
                 else {
-                    accumulator.remove(this.entry.getId());
+                    accumulator.remove(capture.id);
                 }
                 return true;
             }
@@ -148,6 +169,32 @@ public final class TagLoader<R> {
         @Override
         public String toString() {
             return (this.remove ? "-" : "+") + this.entry + " (from " + this.source + ")";
+        }
+    }
+
+    /**
+     * A {@link TagEntry.Lookup} that records, instead of resolving, the id and tag-ness of the entry it is queried with.
+     * Used to recover the {@code (isTag, id)} of a {@code remove} entry from the public {@link TagEntry#build} path,
+     * replacing the NeoForge-only {@code TagEntry#isTag()}/{@code #getId()} accessors. Both methods return {@code null}
+     * so the replayed {@code build} mutates nothing.
+     */
+    private static final class CapturingLookup implements TagEntry.Lookup<Identifier> {
+
+        private Identifier id;
+        private boolean isTag;
+
+        @Override
+        public Identifier element(Identifier key, boolean required) {
+            this.id = key;
+            this.isTag = false;
+            return null;
+        }
+
+        @Override
+        public Collection<Identifier> tag(Identifier key) {
+            this.id = key;
+            this.isTag = true;
+            return null;
         }
     }
 

@@ -5,11 +5,11 @@ import java.util.function.Predicate;
 import com.google.common.base.Predicates;
 
 import dev.shadowsoffire.placebo.cap.InternalItemHandler;
+import dev.shadowsoffire.placebo.transfer.item.ItemResource;
+import dev.shadowsoffire.placebo.transfer.item.ResourceHandlerSlot;
+import dev.shadowsoffire.placebo.transfer.transaction.Transaction;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.transfer.item.ItemResource;
-import net.neoforged.neoforge.transfer.item.ResourceHandlerSlot;
-import net.neoforged.neoforge.transfer.transaction.Transaction;
 
 /**
  * Extension of {@link ResourceHandlerSlot} which takes a filter on what may enter the slot.

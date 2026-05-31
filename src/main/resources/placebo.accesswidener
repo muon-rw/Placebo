@@ -1,0 +1,56 @@
+classTweaker v1 official
+# Fabric/Loom ClassTweaker (supersedes access wideners) — the equivalent of the old
+# META-INF/accesstransformer.cfg (which Fabric ignores). Entries are added back per-subsystem as
+# the code that needs them is ported, each re-verified against MC 26.1.2 with the field/method
+# descriptor the AT format omits. Pending conversions from accesstransformer.cfg:
+#   RecipeManager.recipes / .byName                         (registries / recipes)
+#   LootPool.Builder.entries / .conditions / .functions     (loot)
+#   StateHolder.instance, StateDefinition.owner             (block/state registration)
+#   Screen.font                                             (client tooltips)
+
+# === util (PlaceboUtil.registerCustomColor / Placebo.java NAMED_COLORS reassignment) ===
+# registerCustomColor reads TextColor.NAMED_COLORS and calls .put(); Placebo.onInitialize replaces the vanilla
+# immutable Map.copyOf with a mutable HashMap copy, which requires the field to be both accessible and non-final.
+accessible field net/minecraft/network/chat/TextColor NAMED_COLORS Ljava/util/Map;
+mutable field net/minecraft/network/chat/TextColor NAMED_COLORS Ljava/util/Map;
+
+# === color (GradientColor) ===
+# GradientColor extends TextColor, which is final in vanilla, and calls super(value, name) via the private 2-arg ctor.
+accessible method net/minecraft/network/chat/TextColor <init> (ILjava/lang/String;)V
+extendable class net/minecraft/network/chat/TextColor
+
+# === registry (DeferredHelper) + block_entity (TickingBlockEntityType) ===
+# The BlockEntitySupplier factory interface is a private nested type used in the BlockEntityType ctor signature.
+accessible class net/minecraft/world/level/block/entity/BlockEntityType$BlockEntitySupplier
+# DeferredHelper.blockEntity/tickingBlockEntity construct BlockEntityType directly and TickingBlockEntityType subclasses
+# it; the (factory, Set<Block>) ctor is private and the class is effectively final via that private ctor.
+extendable class net/minecraft/world/level/block/entity/BlockEntityType
+accessible method net/minecraft/world/level/block/entity/BlockEntityType <init> (Lnet/minecraft/world/level/block/entity/BlockEntityType$BlockEntitySupplier;Ljava/util/Set;)V
+# DeferredHelper.simpleParticle does `new SimpleParticleType(overrideLimit)`; the (boolean) ctor is protected.
+accessible method net/minecraft/core/particles/SimpleParticleType <init> (Z)V
+
+# === systems/mixes (MixRegistry / JsonMix) ===
+# JsonMix builds PotionBrewing$Mix via `new PotionBrewing.Mix<>(from, ingredient, to)`; the record is private static final
+# and its canonical ctor is private. MixRegistry reads and mutates the two private final mix lists (makeMutable copies
+# them to ArrayList), so each list needs both accessible and mutable.
+accessible class net/minecraft/world/item/alchemy/PotionBrewing$Mix
+accessible method net/minecraft/world/item/alchemy/PotionBrewing$Mix <init> (Lnet/minecraft/core/Holder;Lnet/minecraft/world/item/crafting/Ingredient;Lnet/minecraft/core/Holder;)V
+accessible field net/minecraft/world/item/alchemy/PotionBrewing potionMixes Ljava/util/List;
+mutable field net/minecraft/world/item/alchemy/PotionBrewing potionMixes Ljava/util/List;
+accessible field net/minecraft/world/item/alchemy/PotionBrewing containerMixes Ljava/util/List;
+mutable field net/minecraft/world/item/alchemy/PotionBrewing containerMixes Ljava/util/List;
+
+# === menu (PlaceboContainerMenu) ===
+# PlaceboContainerMenu#setData overrides AbstractContainerMenu#setData to additionally notify the menu's
+# ContainerListeners (so IDataUpdateListener.dataUpdated fires client-side when a ClientboundContainerSetDataPacket
+# arrives). Vanilla's setData only mutates the DataSlot; the listener-notify pass lives in the private
+# updateDataSlotListeners(int, int). NeoForge patched it accessible; here we widen it 1:1. Descriptor (II)V.
+accessible method net/minecraft/world/inventory/AbstractContainerMenu updateDataSlotListeners (II)V
+
+# === util (DrawsOnLeft) + client tooltips ===
+# DrawsOnLeft (applied to every AbstractContainerScreen via AbstractContainerScreenMixin) reads the screen's
+# left edge and font to position a left-attached tooltip. NeoForge AT'd Screen.font public and exposed
+# AbstractContainerScreen#getLeftPos(); Fabric 26.1.2 has neither — only the protected Screen.font field and the
+# protected AbstractContainerScreen.leftPos field. Widen both 1:1 (the getLeftPos() call becomes a leftPos read).
+accessible field net/minecraft/client/gui/screens/Screen font Lnet/minecraft/client/gui/Font;
+accessible field net/minecraft/client/gui/screens/inventory/AbstractContainerScreen leftPos I

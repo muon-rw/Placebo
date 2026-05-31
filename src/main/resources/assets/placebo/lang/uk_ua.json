@@ -1,5 +1,5 @@
 {
-	"key.categories.placebo": "Placebo",
+	"key.category.placebo.keys": "Placebo",
 	"placebo.toggleTrails": "Перемкнути Patreon сліди",
 	"placebo.toggleWings": "Перемкнути Patreon крила",
 	"placebo.cmd.serialize_success": "Збережено %s у %s.",

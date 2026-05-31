@@ -15,7 +15,6 @@ import org.jetbrains.annotations.Nullable;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.HolderSet;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponents;
@@ -26,7 +25,6 @@ import net.minecraft.data.recipes.RecipeOutput;
 import net.minecraft.data.recipes.RecipeProvider;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -41,9 +39,11 @@ import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.crafting.ShapedRecipePattern;
 import net.minecraft.world.item.crafting.ShapelessRecipe;
+import net.minecraft.world.item.crafting.display.SlotDisplay;
 import net.minecraft.world.level.ItemLike;
-import net.neoforged.neoforge.common.crafting.DataComponentIngredient;
-import net.neoforged.neoforge.common.crafting.ICustomIngredient;
+import net.fabricmc.fabric.api.recipe.v1.ingredient.CustomIngredient;
+import net.fabricmc.fabric.api.recipe.v1.ingredient.DefaultCustomIngredients;
+import net.fabricmc.fabric.api.recipe.v1.ingredient.FabricIngredient;
 
 /**
  * Extension of {@link RecipeProvider.Runner} which allows creating recipes using the syntax from Placebo's old RecipeHelper.
@@ -88,7 +88,7 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
         final LegacyRecipeProvider self = this;
         return new RecipeProvider(registries, output){
             @Override
-            protected void buildRecipes() {
+            public void buildRecipes() {
                 self.recipeOutput = this.output;
                 self.currentRegistries = this.registries;
                 try {
@@ -107,7 +107,7 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
      *
      * @param key    The resource location of the recipe.
      * @param group  The recipe book group of the recipe.
-     * @param output A {@linkplain #makeStack(Object) stack-like} output object.
+     * @param output A {@linkplain #makeTemplate(Object) template-like} output object.
      * @param width  The width of the recipe.
      * @param height The height of the recipe.
      * @param input  A row-major vararg array of {@linkplain #createInput(boolean, Object...) input-like} objects. Must be the same length as width * height.
@@ -128,7 +128,7 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
      *
      * @param key    The resource location of the recipe.
      * @param group  The recipe book group of the recipe.
-     * @param output A {@linkplain #makeStack(Object) stack-like} output object.
+     * @param output A {@linkplain #makeTemplate(Object) template-like} output object.
      * @param inputs A row-major vararg array of {@linkplain #createInput(boolean, Object...) input-like} objects. Empty inputs are not permitted.
      */
     public void addShapeless(Identifier key, String group, Object output, Object... inputs) {
@@ -184,7 +184,10 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
      * Creates an {@link Ingredient} matching a potion item with the given potion type.
      */
     public static Ingredient potionIngredient(Holder<Potion> type) {
-        return DataComponentIngredient.of(false, DataComponents.POTION_CONTENTS, new PotionContents(type), Items.POTION);
+        // Fabric: a non-exhaustive component match on POTION items carrying the requested POTION_CONTENTS,
+        // equivalent to NeoForge's DataComponentIngredient.of(false, POTION_CONTENTS, ..., Items.POTION).
+        DataComponentPatch patch = DataComponentPatch.builder().set(DataComponents.POTION_CONTENTS, new PotionContents(type)).build();
+        return DefaultCustomIngredients.components(Ingredient.of(Items.POTION), patch);
     }
 
     /**
@@ -214,7 +217,7 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
             return template;
         }
         if (thing instanceof ItemStack stack) {
-            return new ItemStackTemplate(stack.getItem(), stack.getCount(), stack.getComponentsPatch());
+            return new ItemStackTemplate(stack.getItem().builtInRegistryHolder(), stack.getCount(), stack.getComponentsPatch());
         }
         if (thing instanceof ItemLike il) {
             return new ItemStackTemplate(il.asItem().builtInRegistryHolder(), 1, DataComponentPatch.EMPTY);
@@ -236,8 +239,8 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
      * <ul>
      * <li>A {@link TagKey} will be converted to a tag ingredient.</li>
      * <li>A {@link String} will be parsed into a {@link Identifier}, and treated as a {@link TagKey}.</li>
-     * <li>An {@link ItemStack} will be converted into a single-stack ingredient. Component data is preserved via {@link DataComponentIngredient}.</li>
-     * <li>An {@link ItemLike} or {@link Holder} will be passed to {@link #makeStack(Object)} and treated as an {@link ItemStack}.</li>
+     * <li>An {@link ItemStack} will be converted into a single-stack ingredient. Component data is preserved via {@link DefaultCustomIngredients#components}.</li>
+     * <li>An {@link ItemLike} or {@link Holder} will be passed to {@link #makeTemplate(Object)} and treated as an {@link ItemStack}.</li>
      * <li>An {@link Ingredient} will be used directly.</li>
      * </ul>
      * If empty inputs are allowed, then {@code null} or {@link ItemStack#EMPTY} will be converted to a sentinel empty {@link Ingredient}.
@@ -270,7 +273,7 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
                 ingredient = Ingredient.of(items.getOrThrow((TagKey<Item>) tag));
             }
             else if (input instanceof String str) {
-                TagKey<Item> parsed = ItemTags.create(Identifier.parse(str));
+                TagKey<Item> parsed = TagKey.create(Registries.ITEM, Identifier.parse(str));
                 ingredient = Ingredient.of(items.getOrThrow(parsed));
             }
             else if (input instanceof ItemStackTemplate template) {
@@ -278,7 +281,9 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
                     ingredient = Ingredient.of(template.item().value());
                 }
                 else {
-                    ingredient = DataComponentIngredient.of(false, template);
+                    // Fabric equivalent of DataComponentIngredient.of(false, template): non-exhaustive
+                    // component match against the template's item carrying the template's component patch.
+                    ingredient = DefaultCustomIngredients.components(Ingredient.of(template.item().value()), template.components());
                 }
             }
             else if (input instanceof ItemStack stack && !stack.isEmpty()) {
@@ -286,7 +291,9 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
                     ingredient = Ingredient.of(stack.getItem());
                 }
                 else {
-                    ingredient = DataComponentIngredient.of(false, stack);
+                    // Fabric equivalent of DataComponentIngredient.of(false, stack): the dedicated
+                    // components(ItemStack) overload matches the stack's changed components on its item.
+                    ingredient = DefaultCustomIngredients.components(stack);
                 }
             }
             else if (input instanceof ItemLike il) {
@@ -298,8 +305,8 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
             else if (input instanceof Ingredient ing) {
                 ingredient = ing;
             }
-            else if (input instanceof ICustomIngredient custom) {
-                ingredient = new Ingredient(custom);
+            else if (input instanceof CustomIngredient custom) {
+                ingredient = custom.toVanilla();
             }
             else {
                 throw new UnsupportedOperationException("Attempted to add invalid recipe. Input " + input + " not allowed.");
@@ -355,20 +362,27 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
     /**
      * Resolves the first available character from an ingredient, given the currently in-use characters.
      */
+    @SuppressWarnings("deprecation") // vanilla Ingredient#items() is the only public access to the resolved items in 26.1
     protected static Character getFirstChar(Collection<Character> inUse, Ingredient ing) {
         String path;
-        if (ing.isCustom()) {
-            ICustomIngredient custom = ing.getCustomIngredient();
+        // Fabric exposes the custom ingredient via the FabricIngredient duck interface; a non-null
+        // result is the equivalent of NeoForge's ing.isCustom() + ing.getCustomIngredient().
+        CustomIngredient custom = ((FabricIngredient) (Object) ing).getCustomIngredient();
+        if (custom != null) {
             Item item = custom.items().map(Holder::value).findFirst().orElse(Items.AIR);
             path = BuiltInRegistries.ITEM.getKey(item).getPath();
         }
         else {
-            HolderSet<Item> values = ing.getValues();
-            if (values instanceof HolderSet.Named<Item> named) {
-                path = named.key().location().getPath();
+            // Vanilla 26.1 no longer exposes the backing HolderSet (NeoForge's ing.getValues() is gone),
+            // so the tag-vs-direct distinction is read off the ingredient's SlotDisplay instead: a
+            // tag-backed Ingredient resolves to a TagSlotDisplay (keyed off the tag name, matching the
+            // old HolderSet.Named branch), otherwise the first resolved item's path is used.
+            SlotDisplay display = ing.display();
+            if (display instanceof SlotDisplay.TagSlotDisplay tagDisplay) {
+                path = tagDisplay.tag().location().getPath();
             }
             else {
-                Holder<Item> first = values.stream().findFirst().orElse(null);
+                Holder<Item> first = ing.items().findFirst().orElse(null);
                 if (first == null) {
                     throw new UnsupportedOperationException("Empty ingredient values for: " + ing);
                 }

@@ -13,20 +13,16 @@ import java.util.UUID;
 
 import org.lwjgl.glfw.GLFW;
 
-import com.mojang.blaze3d.platform.InputConstants;
-
 import dev.shadowsoffire.placebo.Placebo;
 import dev.shadowsoffire.placebo.PlaceboClient;
 import dev.shadowsoffire.placebo.patreon.PatreonUtils.WingType;
 import dev.shadowsoffire.placebo.payloads.PatreonDisablePayload;
 import dev.shadowsoffire.placebo.payloads.PatreonDisablePayload.CosmeticType;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelLayerLocation;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.client.event.InputEvent;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-import net.neoforged.neoforge.common.NeoForge;
 
 public class WingsManager {
 
@@ -62,15 +58,22 @@ public class WingsManager {
             }
             Placebo.LOGGER.info("Loaded {} patreon wings.", WINGS.size());
             if (WINGS.size() > 0) {
-                NeoForge.EVENT_BUS.register(WingsManager.class);
+                // Fabric: NeoForge.EVENT_BUS.register(WingsManager.class) -> register the key-poll tick callback directly.
+                ClientTickEvents.END_CLIENT_TICK.register(mc -> keys());
             }
         }, "Placebo Patreon Wing Loader").start();
     }
 
-    @SubscribeEvent
-    public static void keys(InputEvent.Key e) {
-        if (e.getAction() == InputConstants.PRESS && TOGGLE.matches(e.getKeyEvent()) && Minecraft.getInstance().getConnection() != null) {
-            ClientPacketDistributor.sendToServer(new PatreonDisablePayload(CosmeticType.WINGS, Minecraft.getInstance().player.getUUID()));
+    /**
+     * Polls the toggle key each client tick. Replaces NeoForge's {@code InputEvent.Key} handler + {@code TOGGLE.matches}:
+     * on Fabric the keybind is registered and drained via {@link KeyMapping#consumeClick()}.
+     */
+    public static void keys() {
+        while (TOGGLE.consumeClick()) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.getConnection() != null) {
+                ClientPlayNetworking.send(new PatreonDisablePayload(CosmeticType.WINGS, mc.player.getUUID()));
+            }
         }
     }
 

@@ -13,24 +13,19 @@ import java.util.UUID;
 
 import org.lwjgl.glfw.GLFW;
 
-import com.mojang.blaze3d.platform.InputConstants;
-
 import dev.shadowsoffire.placebo.Placebo;
 import dev.shadowsoffire.placebo.PlaceboClient;
 import dev.shadowsoffire.placebo.patreon.PatreonUtils.PatreonParticleType;
 import dev.shadowsoffire.placebo.payloads.PatreonDisablePayload;
 import dev.shadowsoffire.placebo.payloads.PatreonDisablePayload.CosmeticType;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.player.Player;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.InputEvent;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-import net.neoforged.neoforge.common.NeoForge;
 
 public class TrailsManager {
 
@@ -65,13 +60,19 @@ public class TrailsManager {
             }
             Placebo.LOGGER.info("Loaded {} patreon trails.", TRAILS.size());
             if (TRAILS.size() > 0) {
-                NeoForge.EVENT_BUS.register(TrailsManager.class);
+                // Fabric: NeoForge.EVENT_BUS.register(TrailsManager.class) -> register the particle + key-poll tick callbacks.
+                ClientTickEvents.END_CLIENT_TICK.register(mc -> {
+                    clientTick();
+                    keys();
+                });
             }
         }, "Placebo Patreon Trail Loader").start();
     }
 
-    @SubscribeEvent
-    public static void clientTick(ClientTickEvent.Post e) {
+    /**
+     * Spawns the per-player trail particles each client tick. Replaces NeoForge's {@code ClientTickEvent.Post} handler.
+     */
+    public static void clientTick() {
         PatreonParticleType t = null;
         if (Minecraft.getInstance().level != null && !Minecraft.getInstance().isPaused()) {
             for (Player player : Minecraft.getInstance().level.players()) {
@@ -85,10 +86,16 @@ public class TrailsManager {
         }
     }
 
-    @SubscribeEvent
-    public static void keys(InputEvent.Key e) {
-        if (e.getAction() == InputConstants.PRESS && TOGGLE.matches(e.getKeyEvent()) && Minecraft.getInstance().getConnection() != null) {
-            ClientPacketDistributor.sendToServer(new PatreonDisablePayload(CosmeticType.TRAILS, Minecraft.getInstance().player.getUUID()));
+    /**
+     * Polls the toggle key each client tick. Replaces NeoForge's {@code InputEvent.Key} handler + {@code TOGGLE.matches}:
+     * on Fabric the keybind is registered and drained via {@link KeyMapping#consumeClick()}.
+     */
+    public static void keys() {
+        while (TOGGLE.consumeClick()) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.getConnection() != null) {
+                ClientPlayNetworking.send(new PatreonDisablePayload(CosmeticType.TRAILS, mc.player.getUUID()));
+            }
         }
     }
 }
